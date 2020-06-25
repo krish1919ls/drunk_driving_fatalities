@@ -1,0 +1,631 @@
+---
+title: 'Full Code: How do drunk driving laws affect traffic deaths?'
+author: 'Sai Krishna Lanka'
+date: '6/22/2020'
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r load libraries and set options}
+library(foreign)
+library(tidyverse)
+library(plotly)
+library(RColorBrewer)
+library(USAboundaries)
+library(sp)
+library(tmap)
+library(plm)
+library(stargazer)
+```
+
+```{r load data}
+cf.df <- read.dta('../data/car_fatalities.dta', convert.dates = TRUE, convert.factors = TRUE, 
+                  missing.type = FALSE, convert.underscore = FALSE, warn.missing.labels = TRUE)
+
+cf.df$year <-  as.factor(cf.df$year)
+
+cf.df$mldabin <- cut(cf.df$mlda, breaks = 18:22, include.lowest = TRUE, right = FALSE)
+cf.df[is.na(cf.df$jaild),]$jaild <- 0
+cf.df$jaild <- as.factor(cf.df$jaild)
+cf.df[is.na(cf.df$comserd),]$comserd <- 0
+cf.df$comserd <- as.factor(cf.df$comserd)
+cf.df$jailcomserd <- ifelse(cf.df$jaild == 1 | cf.df$comserd == 1, 1, 0)
+cf.df$lnperinc <- log(cf.df$perinc)
+
+cf.df$mrall <- cf.df$mrall * 100000
+cf.df$mralln <- cf.df$mralln * 100000
+cf.df$mraidall <- cf.df$mraidall * 100000
+cf.df$mra1517 <- cf.df$mra1517 * 100000
+cf.df$mra1517n <- cf.df$mra1517n * 100000
+cf.df$mra1820 <- cf.df$mra1820 * 100000
+cf.df$mra1820n <- cf.df$mra1820n * 100000
+cf.df$mra2124 <- cf.df$mra2124 * 100000
+cf.df$mra2124n <- cf.df$mra2124n * 100000
+cf.df$mraua <- ifelse(cf.df$mldabin == '[18,19)', cf.df$a1517/cf.df$pop1517, 
+                      (cf.df$a1517 + cf.df$a1820)/(cf.df$pop1517 + cf.df$pop1820)) 
+cf.df$mraua <- cf.df$mraua * 100000
+
+cf.df <- pdata.frame(cf.df, index = c('state', 'year'))
+
+state.list <- unique(cf.df$state)
+
+cf.geo.df <- us_states()
+cf.geo.df <- cf.geo.df[cf.geo.df$stusps %in% state.list,]
+cf.geo.df <- merge(cf.geo.df, cf.df, by.x = 'stusps', by.y = 'state')
+```
+
+```{r dependent: vehicle fatality rate}
+cf.df %>%
+  plot_ly(y = ~mrall, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Vehicle Fatality Rate per Year', 
+         yaxis = list(title = 'Vehicle Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(y = ~mrall, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Vehicle Fatality Rate per State', 
+         yaxis = list(title = 'Vehicle Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~mrall, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Vehicle Fatality Rate',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Vehicle Fatality Rate (per 100,000)'))
+
+mrall.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'mrall', palette = 'Reds', title = 'Vehicle Fatality Rate\n(per 100,000)', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(mrall.gif, filename = '../support/mrall.gif', delay = 200, width = 1000)
+
+rm(mrall.gif)
+```
+
+```{r independent: beer tax}
+cf.df %>%
+  plot_ly(y = ~beertax, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Beer Tax per Year', 
+         yaxis = list(title = 'Beer Tax (in $)'))
+
+cf.df %>%
+  plot_ly(y = ~beertax, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Beer Tax per State', 
+         yaxis = list(title = 'Beer Tax (in $)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~beertax, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Beer Tax',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Beer Tax (in $)'))
+
+beertax.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'beertax', palette = 'Blues', title = 'Beer Tax (in $)', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(beertax.gif, filename = '../support/beertax.gif', delay = 200, width = 1000)
+
+rm(beertax.gif)
+```
+
+```{r mrall panel: beer tax}
+cf.df %>%
+  plot_ly(x = ~beertax,y = ~mrall, type = 'scatter', mode = 'markers', name = 'Point') %>%
+  add_lines(x = ~beertax, y = fitted(lm(mrall ~ beertax, data = cf.df)), name = 'Fitted Line') %>%
+  layout(title = 'Regression without Entity and Time Effects', 
+         xaxis = list(title = 'Beer Tax (in dollars)'), 
+         yaxis = list(title = 'Vehicle Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~beertax, color = ~year, colors = 'Dark2') %>%
+  add_trace(z = ~mrall, type = 'scatter3d', mode = 'markers', marker = list(size = 3)) %>%
+  add_trace(z = ~fitted(lm(mrall ~ year + beertax, data = cf.df)), type = 'scatter3d', mode = 'lines') %>%
+  layout(title = 'Regression with Time Effects',
+         scene = list(xaxis = list(title = 'Time'),
+                      yaxis = list(title = 'Beer Tax (in dollars)'),
+                      zaxis = list(title = 'Vehicle Fatality Rate (per 100,000)')))
+
+cf.df %>%
+  plot_ly(x = ~state, y = ~beertax, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  add_trace(z = ~mrall, type = 'scatter3d', mode = 'markers', marker = list(size = 3)) %>%
+  add_trace(z = ~fitted(lm(mrall ~ state + beertax, data = cf.df)), type = 'scatter3d', mode = 'lines') %>%
+  layout(title = 'Regression with Entity Effects',
+         scene = list(xaxis = list(title = 'State'),
+                      yaxis = list(title = 'Beer Tax (in dollars)'),
+                      zaxis = list(title = 'Vehicle Fatality Rate (per 100,000)')))
+```
+
+```{r mrall regression: beer tax}
+fit1 <- lm(mrall ~ beertax, 
+           data = cf.df)
+
+fit2 <- plm(mrall ~ beertax, 
+            effect = 'time', model = 'within', data = cf.df)
+
+fit3 <- plm(mrall ~ beertax, 
+            effect = 'individual', model = 'within', data = cf.df)
+
+fit4 <- plm(mrall ~ beertax, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit1, fit2, fit3, fit4, 
+          digits = 3,
+          header = FALSE,
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit1, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit2, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit3, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit4, type = 'HC1')))),
+          title = 'Linear Panel Regression Models of Traffic Fatalities due to Drunk Driving',
+          model.numbers = FALSE,
+          column.labels = c('Model-1', 'Model-2', 'Model-3', 'Model-4'))
+```
+
+```{r mrall significance of time effects: beer tax}
+fit3a <- lm(mrall ~ state + beertax, 
+            data = cf.df)
+
+fit4a <- lm(mrall ~ state + year + beertax, 
+            data = cf.df)
+
+anova(fit3a, fit4a)
+```
+
+```{r independent: min legal drinking age}
+cf.df %>%
+  group_by(year, mldabin) %>%
+  summarise(tot = n()) %>%
+  plot_ly(x = ~year, y = ~tot, color = ~mldabin, colors = 'Greens', type = 'bar') %>%
+  layout(title = 'Barplot: Minimum Legal Drinking Age', 
+         xaxis = list(title = 'Year'), yaxis = list(title = '# of States'), barmode = 'stack')
+
+mldabin.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'mldabin', palette = 'Greens', title = 'Minimum Legal Drinking Age', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(mldabin.gif, filename = '../support/mldabin.gif', delay = 200, width = 1000)
+
+rm(mldabin.gif)
+```
+
+```{r mrall regression: beer tax + min legal drinking age}
+fit5 <- plm(mrall ~ beertax + mldabin, 
+            effect = 'individual', model = 'within', data = cf.df)
+
+fit6 <- plm(mrall ~ beertax + mldabin, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit3, fit5, fit4, fit6, 
+          digits = 3,
+          header = FALSE,
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit3, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit5, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit4, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit6, type = 'HC1')))),
+          title = 'Linear Panel Regression Models of Traffic Fatalities due to Drunk Driving',
+          model.numbers = FALSE,
+          column.labels = c('Model-3', 'Model-5', 'Model-4', 'Model-6'))
+```
+
+```{r mrall: importance of min legal drinking age}
+fit6a <- lm(mrall ~ state + year + beertax + mldabin, 
+            data = cf.df)
+
+anova(fit4a, fit6a)
+```
+
+```{r independent: community service + jail sentence}
+cf.df %>%
+  filter(comserd == 1 & jaild == 0) %>%
+  group_by(year) %>%
+  summarise(cstate = paste(state, collapse = ', '))
+
+cf.df %>%
+  filter(comserd == 1 | jaild == 1) %>%
+  group_by(year) %>%
+  summarise(cjstate = paste(state, collapse = ', '))
+```
+
+```{r mrall regression: state laws}
+fit7 <- plm(mrall ~ beertax + mldabin + jaild + comserd, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit8 <- plm(mrall ~ beertax + mldabin + jailcomserd, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit4, fit6, fit7, fit8, 
+          digits = 3,
+          header = FALSE,
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit4, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit6, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit7, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit8, type = 'HC1')))),
+          title = 'Linear Panel Regression Models of Traffic Fatalities due to Drunk Driving',
+          model.numbers = FALSE,
+          column.labels = c('Model-4', 'Model-6', 'Model-7', 'Model-8'))
+```
+
+```{r independent: state unemployment rate}
+cf.df %>%
+  plot_ly(y = ~unrate, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: State Unemployment Rate per Year', 
+         yaxis = list(title = 'State Unemployment Rate (in %)'))
+
+cf.df %>%
+  plot_ly(y = ~unrate, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: State Unemployment Rate per State', 
+         yaxis = list(title = 'State Unemployment Rate (in %)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~unrate, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: State Unemployment Rate',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'State Unemployment Rate (in %)'))
+
+
+unrate.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'unrate', palette = 'Reds', title = 'State Unemployment\nRate (in %)', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(unrate.gif, filename = '../support/unrate.gif', delay = 200, width = 1000)
+
+rm(unrate.gif)
+```
+
+```{r independent: per capita personal income}
+cf.df %>%
+  plot_ly(y = ~perinc, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Per Capita Personal Income per Year', 
+         yaxis = list(title = 'Per Capita Personal Income (in $)'))
+
+cf.df %>%
+  plot_ly(y = ~lnperinc, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Log Per Capita Personal Income per Year', 
+         yaxis = list(title = 'Per Capita Personal Income (in log)'))
+
+cf.df %>%
+  plot_ly(y = ~perinc, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Per Capita Personal Income per State', 
+         yaxis = list(title = 'Per Capita Personal Income (in $)'))
+
+cf.df %>%
+  plot_ly(y = ~lnperinc, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Log Per Capita Personal Income per State', 
+         yaxis = list(title = 'Per Capita Personal Income (in log)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~lnperinc, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Log Per Capita Personal Income',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Per Capita Personal Income (in log)'))
+
+lnperinc.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'lnperinc', palette = 'Greens', title = 'Per Capita Personal\nIncome (in log)', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(lnperinc.gif, filename = '../support/lnperinc.gif', delay = 200, width = 1000)
+
+rm(lnperinc.gif)
+```
+
+```{r independent: gsp rate of change}
+cf.df %>%
+  plot_ly(y = ~gspch, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: GSP Rate of Change per Year', 
+         yaxis = list(title = 'GSP Rate of Change'))
+
+cf.df %>%
+  plot_ly(y = ~gspch, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: GSP Rate of Change per State', 
+         yaxis = list(title = 'GSP Rate of Change'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~gspch, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: GSP Rate of Change',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'GSP Rate of Change'))
+
+gspch.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'gspch', palette = 'RdYlGn', title = 'GSP Rate of Change', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(gspch.gif, filename = '../support/gspch.gif', delay = 200, width = 1000)
+
+rm(gspch.gif)
+```
+
+```{r mrall regression: state laws + economic factors}
+fit9 <- plm(mrall ~ beertax + mldabin + jaild + comserd + unrate + lnperinc + gspch, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit10 <- plm(mrall ~ beertax + mldabin + jailcomserd + unrate + lnperinc + gspch, 
+             effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit7, fit8, fit9, fit10, 
+          digits = 3,
+          header = FALSE,
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit7, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit8, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit9, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit10, type = 'HC1')))), 
+          title = 'Linear Panel Regression Models of Traffic Fatalities due to Drunk Driving',
+          model.numbers = FALSE,
+          column.labels = c('Model-7', 'Model-8', 'Model-9', 'Model-10'))
+```
+
+```{r independent: per capita pure alcohol consumption}
+cf.df %>%
+  plot_ly(y = ~spircons, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Per Capita Pure Alcohol Consumption  per Year', 
+         yaxis = list(title = 'Per Capita Pure Alcohol Consumption (in gal)'))
+
+cf.df %>%
+  plot_ly(y = ~spircons, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Per Capita Pure Alcohol Consumption  per State', 
+         yaxis = list(title = 'Per Capita Pure Alcohol Consumption (in gal)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~spircons, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Per Capita Pure Alcohol Consumption',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Per Capita Pure Alcohol Consumption (in gal)'))
+
+spircons.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'spircons', palette = 'Blues', title = 'Per Capita Pure Alcohol\nConsumption (in gal)', 
+          n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(spircons.gif, filename = '../support/spircons.gif', delay = 200, width = 1000)
+
+rm(spircons.gif)
+```
+
+```{r independent: average mile per driver}
+cf.df %>%
+  plot_ly(y = ~vmiles, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Average Mile per Driver per Year', 
+         yaxis = list(title = 'Average Mile per Driver'))
+
+cf.df %>%
+  plot_ly(y = ~vmiles, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Average Mile per Driver per State', 
+         yaxis = list(title = 'Average Mile per Driver'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~vmiles, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Average Mile per Driver',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Average Mile per Driver'))
+
+vmiles.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'vmiles', palette = 'Blues', title = 'Average Mile\nper Driver', 
+          n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(vmiles.gif, filename = '../support/vmiles.gif', delay = 200, width = 1000)
+
+rm(vmiles.gif)
+```
+
+```{r mrall regression: state laws + economic factors + demographic factors}
+fit11 <- plm(mrall ~ beertax + mldabin + jailcomserd + unrate + lnperinc + gspch + spircons + vmiles  
+             + sobapt + mormon + dry + yngdrv, 
+             effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit8, fit10, fit11, 
+          digits = 3,
+          header = FALSE,
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit8, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit10, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit11, type = 'HC1')))), 
+          title = 'Linear Panel Regression Models of Traffic Fatalities due to Drunk Driving',
+          model.numbers = FALSE,
+          column.labels = c('Model-8', 'Model-10', 'Model-11'))
+```
+
+```{r mrall regression: final models}
+fit12 <- plm(mrall ~ beertax + mldabin + jailcomserd + unrate + lnperinc + spircons + dry, 
+             effect = 'twoways', model = 'within', data = cf.df)
+
+fit13 <- plm(mrall ~ beertax + unrate + lnperinc + spircons + dry, 
+             effect = 'twoways', model = 'within', data = cf.df)
+
+fit14 <- plm(mrall ~ beertax + unrate + lnperinc + spircons + dry, 
+             effect = 'individual', model = 'within', data = cf.df)
+
+fit15 <- plm(mrall ~ beertax + unrate + lnperinc + spircons + dry, 
+             effect = 'twoways', model = 'random', random.method = 'nerlove', data = cf.df)
+
+stargazer(fit12, fit13, fit14, fit15, 
+          digits = 3,
+          header = FALSE,
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit12, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit13, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit14, type = 'HC1'))),
+                    sqrt(diag(vcovHC(fit15, type = 'HC1')))), 
+          title = 'Linear Panel Regression Models of Traffic Fatalities due to Drunk Driving',
+          model.numbers = FALSE,
+          column.labels = c('Model-12', 'Model-13', 'Model-14', 'Model-15'))
+```
+
+```{r mrall significance of time effects: chosen model}
+fit13a <- lm(mrall ~ state + year + beertax + unrate + lnperinc + spircons + dry, 
+            data = cf.df)
+
+fit14a <- lm(mrall ~ state + beertax + unrate + lnperinc + spircons + dry, 
+             data = cf.df)
+
+anova(fit14a, fit13a)
+```
+
+```{r mrall hausman test}
+phtest(fit13, fit15)
+```
+
+```{r mrall anova: full model vs chosen model}
+fit11a <- lm(mrall ~ state + year + beertax + mldabin + jailcomserd + unrate + lnperinc + gspch + spircons 
+             + vmiles + sobapt + mormon + dry + yngdrv, 
+             data = cf.df)
+
+anova(fit13a, fit11a)
+```
+
+```{r dependent: night time fatality rate}
+cf.df %>%
+  plot_ly(y = ~mralln, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Night Time Fatality Rate per Year', 
+         yaxis = list(title = 'Night Time Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(y = ~mralln, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Night Time Fatality Rate per State', 
+         yaxis = list(title = 'Night Time Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~mralln, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Night Time Fatality Rate',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Night Time Fatality Rate (per 100,000)'))
+
+mralln.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'mralln', palette = 'Reds', title = 'Night Time Fatality Rate\n(per 100,000)', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(mralln.gif, filename = '../support/mralln.gif', delay = 200, width = 1000)
+
+rm(mralln.gif)
+```
+
+```{r mralln regression: state laws + economic factors + demographic factors}
+fit16 <- plm(mralln ~ beertax, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit17 <- plm(mralln ~ beertax + mldabin + jailcomserd, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit18 <- plm(mralln ~ beertax + mldabin + jailcomserd + unrate + lnperinc + gspch, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit19 <- plm(mralln ~ beertax + mldabin + jailcomserd + unrate + lnperinc + gspch + spircons + vmiles
+             + sobapt + mormon + dry + yngdrv, 
+             effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit16, fit17, fit18, fit19,  
+          digits = 3, 
+          header = FALSE, 
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit16, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit17, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit18, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit19, type = 'HC1')))), 
+          title = 'Linear Panel Regression Models of Night Time Traffic Fatalities due to Drunk Driving', 
+          model.numbers = FALSE, 
+          column.labels = c('Model-16', 'Model-17', 'Model-18', 'Model-19'))
+```
+
+```{r dependent: underage fatality rate}
+cf.df %>%
+  plot_ly(y = ~mraua, type = 'box', color = ~year, colors = 'Dark2') %>%
+  layout(title = 'Boxplot: Underage Fatality Rate per Year', 
+         yaxis = list(title = 'Underage Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(y = ~mraua, type = 'box', color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list))) %>%
+  layout(title = 'Boxplot: Underage Fatality Rate per State', 
+         yaxis = list(title = 'Underage Fatality Rate (per 100,000)'))
+
+cf.df %>%
+  plot_ly(x = ~year, y = ~mraua, color = ~state, 
+          colors = colorRampPalette(brewer.pal(n = 8, name = 'Dark2'))(length(state.list)),
+          type = 'scatter', mode = 'markers+lines') %>%
+  layout(title = 'Trendplot: Underage Fatality Rate',
+         xaxis = list(title = 'Year'),
+         yaxis = list(title = 'Underage Fatality Rate (per 100,000)'))
+
+mraua.gif <- tm_shape(cf.geo.df) +
+  tm_fill(col = 'mraua', palette = 'Reds', title = 'Underage Fatality Rate\n(per 100,000)', n = 10) +
+  tm_borders(col = 'grey20', lwd = 0.5) +
+  tm_facets(along = 'year', free.coords = FALSE) +
+  tm_layout(legend.title.size = 0.4, legend.text.size = 0.3, legend.position = c('right', 'bottom'))
+
+tmap_animation(mraua.gif, filename = '../support/mraua.gif', delay = 200, width = 1000)
+
+rm(mraua.gif)
+```
+
+```{r mraua regression: state laws + economic factors + demographic factors}
+fit20 <- plm(mraua ~ beertax + mldabin + jailcomserd, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit21 <- plm(mraua ~ beertax + mldabin + jailcomserd + unrate + lnperinc + gspch, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+fit22 <- plm(mraua ~ beertax + mldabin + jailcomserd + unrate + lnperinc + gspch + spircons + vmiles
+             + sobapt + mormon + dry, 
+             effect = 'twoways', model = 'within', data = cf.df)
+
+fit23 <- plm(mraua ~ beertax + mldabin + lnperinc + unrate + spircons + mormon, 
+            effect = 'twoways', model = 'within', data = cf.df)
+
+stargazer(fit20, fit21, fit22, fit23,  
+          digits = 3, 
+          header = FALSE, 
+          type = 'text', 
+          se = list(sqrt(diag(vcovHC(fit20, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit21, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit22, type = 'HC1'))), 
+                    sqrt(diag(vcovHC(fit23, type = 'HC1')))), 
+          title = 'Linear Panel Regression Models of Underage Traffic Fatalities due to Drunk Driving', 
+          model.numbers = FALSE, 
+          column.labels = c('Model-20', 'Model-21', 'Model-22', 'Model-23'))
+```
