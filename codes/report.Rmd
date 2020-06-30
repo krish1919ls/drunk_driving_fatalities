@@ -17,6 +17,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
 
 <style>body {text-align: justify}</style>
 
+[Github Repo](https://github.com/krish1919ls/drunk_driving_fatalities){target='_blank'}
+
 ## Introduction
 According to National Highway Traffic Safety Administration, almost 30 people in the United States die in drunk-driving crashes daily — that is one person every 50 minutes. These deaths have fallen by a third in the last three decades (from 1980s); however, drunk-driving crashes claim more than 10,000 lives per year. This project investigates the importance of beer tax and other state laws on motor vehicle fatality rate. Effects of economic and demographic factors are also considered in the regression models to understand the true effects.
 
