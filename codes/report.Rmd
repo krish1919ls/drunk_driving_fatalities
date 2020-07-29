@@ -28,12 +28,16 @@ Stock, J.H. and Watson, M.W. (2007) explains the importance of fixed effect mode
 However, demographic factors are not included in the econometric models proposed before. Consequently, such variables are included in the regression models.
 
 ```{r load libraries and set options}
-library(foreign)
-library(tidyverse)
-library(plm)
-library(plotly)
-library(RColorBrewer)
-library(stargazer)
+if(!require('pacman')) install.packages('pacman')
+pacman::p_load(
+  foreign,
+  tidyverse,
+  plotly,
+  RColorBrewer,
+  knitr,
+  plm,
+  stargazer
+)
 ```
 
 ## Data
@@ -140,13 +144,13 @@ cf.df %>%
 ###### Community Service and Jail Sentence
 
 ```{r independent: community service + jail sentence}
-knitr::kable(cf.df %>%
+kable(cf.df %>%
   filter(comserd == 1 & jaild == 0) %>%
   group_by(year) %>%
   summarise(cstate = paste(state, collapse = ', ')),
   col.names = c('Year', 'States Implementing Only Mandatory Community Service'))
 
-knitr::kable(cf.df %>%
+kable(cf.df %>%
   filter(comserd == 1 | jaild == 1) %>%
   group_by(year) %>%
   summarise(cjstate = paste(state, collapse = ', ')),
